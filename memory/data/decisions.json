@@ -1,0 +1,182 @@
+[
+  {
+    "id": 1,
+    "date": "2026-05-11 08:35:07",
+    "pair": "EUR_USD",
+    "action": "BUY",
+    "confidence": 72,
+    "stop_loss": 0,
+    "take_profit": 0,
+    "position_size": 0.05,
+    "reasoning": "Executing BUY based on analyst consensus and approved risk",
+    "analyst_summary": {
+      "Technical Analyst": "**Technical Analysis Report: EUR_USD**\n\n1. **Overall trend direction**: The trend is BULLISH across both H1 and H4 timeframes.\n2. **Key support and resistance levels**: \n   - Support: 1.17355 (H1), 1.",
+      "Fundamental Analyst": "As a forex fundamental analyst, I'll assess the EUR/USD pair from a macroeconomic perspective. \n\n1. **Interest rate differential**: The European Central Bank (ECB) has been maintaining a dovish stance",
+      "Sentiment Analyst": "As a forex sentiment analyst, I've evaluated the current market sentiment for EUR_USD. \n\n1. Retail trader positioning: 72% of retail traders are long EUR_USD, indicating a contrarian bearish signal.\n2",
+      "News Analyst": "Analyzing recent news, I found no immediate market-moving events (rate decisions, NFP, CPI, GDP releases) that directly impact EUR_USD. Geopolitical risks are minimal, with no significant events affec"
+    },
+    "debate_rounds": 2,
+    "outcome": "pending",
+    "reflection": ""
+  },
+  {
+    "id": 2,
+    "date": "2026-05-11 08:39:17",
+    "pair": "EUR_USD",
+    "action": "BUY",
+    "confidence": 72,
+    "stop_loss": 0,
+    "take_profit": 0,
+    "position_size": 0.05,
+    "reasoning": "Executing BUY based on analyst consensus and approved risk",
+    "analyst_summary": {
+      "Technical Analyst": "**Technical Analysis Report: EUR_USD**\n\n1. **Overall trend direction**: The trend is BULLISH across both H1 and H4 timeframes.\n2. **Key support and resistance levels**: \n   - Support: 1.17359 (H1), 1.",
+      "Fundamental Analyst": "As a forex fundamental analyst, I'll analyze EUR/USD from a macroeconomic perspective. \n\n1. **Interest Rate Differential**: The European Central Bank (ECB) has been maintaining a dovish stance, keepin",
+      "Sentiment Analyst": "As a forex sentiment analyst, I've evaluated the current market sentiment for EUR_USD. \n\n1. Retail trader positioning: 72% of retail traders are long EUR_USD, indicating a contrarian bearish signal.\n2",
+      "News Analyst": "Analyzing recent news, there are no immediate market-moving events (rate decisions, NFP, CPI, GDP releases) that directly impact EUR/USD. Geopolitical risks are also minimal, with no significant event"
+    },
+    "debate_rounds": 2,
+    "outcome": "pending",
+    "reflection": ""
+  },
+  {
+    "id": 3,
+    "date": "2026-05-11 08:47:42",
+    "pair": "EUR_USD",
+    "action": "BUY",
+    "confidence": 65,
+    "stop_loss": 0,
+    "take_profit": 0,
+    "position_size": 0.01,
+    "reasoning": "Executing BUY \u2014 analyst consensus with 65% confidence.",
+    "analyst_summary": {
+      "Technical Analyst": "**Technical Analysis Report: EUR_USD**\n\n1. **Overall Trend Direction**: The trend is BULLISH across both H1 and H4 timeframes.\n2. **Key Support and Resistance Levels**: \n   - Support: 1.17359 (H1), 1.",
+      "Fundamental Analyst": "From a macroeconomic perspective, the EUR/USD exchange rate is influenced by several key factors. \n\n1. Interest rate differential: The European Central Bank (ECB) has maintained a relatively accommoda",
+      "Sentiment Analyst": "Analyzing current market sentiment for EUR_USD:\n\n1. **Retail trader positioning**: 72% of retail traders are long EUR_USD, indicating a bearish contrarian signal.\n2. **COT report**: Institutional posi",
+      "News Analyst": "Analyzing recent news, there are no immediate market-moving events (1) affecting EUR/USD. Geopolitical risks (2) are minimal, with no direct impact on the currency pair. Central bank communications (3"
+    },
+    "debate_rounds": 2,
+    "outcome": "pending",
+    "reflection": ""
+  },
+  {
+    "id": 4,
+    "date": "2026-05-11 08:32:01",
+    "pair": "GBP_USD",
+    "action": "BUY",
+    "confidence": 72,
+    "stop_loss": 0,
+    "take_profit": 0,
+    "position_size": 0.05,
+    "reasoning": "Executing BUY based on analyst consensus and approved risk",
+    "analyst_summary": {
+      "Technical Analyst": "**GBP_USD Technical Analysis Report**\n\n1. **Overall trend direction**: The H4 timeframe indicates a bullish trend, while the H1 timeframe shows a mixed trend. Considering both timeframes, the overall ",
+      "Fundamental Analyst": "As a forex fundamental analyst, I analyze GBP/USD from a macroeconomic perspective. \n\n1. **Interest Rate Differential**: The Bank of England (BoE) has maintained a relatively higher interest rate comp",
+      "Sentiment Analyst": "Analyzing current market sentiment for GBP_USD:\n\n1. **Retail trader positioning**: 72% of retail traders are long, indicating a bearish contrarian signal.\n2. **COT report**: Institutional positioning ",
+      "News Analyst": "Analyzing recent news, there are no immediate market-moving events (e.g., rate decisions, NFP, CPI, GDP releases) that directly impact GBP/USD. Geopolitical risks are also minimal, with no significant"
+    },
+    "debate_rounds": 2,
+    "outcome": "pending",
+    "reflection": ""
+  },
+  {
+    "id": 5,
+    "date": "2026-05-11 08:36:11",
+    "pair": "GBP_USD",
+    "action": "BUY",
+    "confidence": 72,
+    "stop_loss": 0,
+    "take_profit": 0,
+    "position_size": 0.05,
+    "reasoning": "Executing BUY based on analyst consensus and approved risk",
+    "analyst_summary": {
+      "Technical Analyst": "**GBP_USD Technical Analysis Report**\n\n1. **Overall Trend Direction**: The H4 timeframe indicates a bullish trend, while the H1 timeframe shows a mixed trend. Considering the higher timeframe, the ove",
+      "Fundamental Analyst": "As a forex fundamental analyst, I'll analyze GBP/USD from a macroeconomic perspective. \n\n1. **Interest Rate Differential**: The Bank of England (BoE) has been maintaining a relatively higher interest ",
+      "Sentiment Analyst": "Analyzing current market sentiment for GBP_USD, I observe:\n\n1. Retail trader positioning: 72% of retail traders are long, indicating a contrarian bearish signal.\n2. COT report: Institutional traders a",
+      "News Analyst": "Analyzing recent news, there are no immediate market-moving events (1) such as rate decisions, NFP, CPI, or GDP releases that directly impact GBP/USD. Geopolitical risks (2) are minimal, with no signi"
+    },
+    "debate_rounds": 2,
+    "outcome": "pending",
+    "reflection": ""
+  },
+  {
+    "id": 6,
+    "date": "2026-05-11 08:40:19",
+    "pair": "GBP_USD",
+    "action": "BUY",
+    "confidence": 72,
+    "stop_loss": 0,
+    "take_profit": 0,
+    "position_size": 0.05,
+    "reasoning": "Executing BUY based on analyst consensus and approved risk",
+    "analyst_summary": {
+      "Technical Analyst": "**Technical Analysis Report: GBP_USD**\n\n1. **Overall trend direction**: The H4 timeframe indicates a bullish trend, while the H1 timeframe shows a mixed trend. Considering the higher timeframe, the ov",
+      "Fundamental Analyst": "As a forex fundamental analyst, I analyze GBP/USD from a macroeconomic perspective. \n\n1. **Interest Rate Differential**: The Bank of England (BoE) has been maintaining a relatively higher interest rat",
+      "Sentiment Analyst": "Analyzing current market sentiment for GBP_USD:\n\n1. **Retail trader positioning**: 72% of retail traders are long, indicating a bearish contrarian signal.\n2. **COT report**: Institutional positioning ",
+      "News Analyst": "Analyzing recent news, there are no immediate market-moving events (1) affecting GBP/USD. Geopolitical risks (2) are minimal, with no significant developments. Central bank communications (3) have bee"
+    },
+    "debate_rounds": 2,
+    "outcome": "pending",
+    "reflection": ""
+  },
+  {
+    "id": 7,
+    "date": "2026-05-11 08:33:03",
+    "pair": "USD_JPY",
+    "action": "SELL",
+    "confidence": 60,
+    "stop_loss": 0,
+    "take_profit": 0,
+    "position_size": 0.05,
+    "reasoning": "Executing SELL based on analyst consensus and approved risk",
+    "analyst_summary": {
+      "Technical Analyst": "**Technical Analysis Report: USD_JPY**\n\n1. **Overall Trend Direction**: The trend direction is conflicting across timeframes, with H1 being bullish and H4 being bearish. However, considering the highe",
+      "Fundamental Analyst": "As a forex fundamental analyst, I analyze USD_JPY from a macroeconomic perspective. \n\n1. **Interest Rate Differential**: The US Federal Reserve (Fed) has been maintaining a hawkish stance, with intere",
+      "Sentiment Analyst": "Analyzing current market sentiment for USD_JPY:\n\n1. Retail trader positioning: 72% of retail traders are long USD_JPY, indicating a contrarian bearish signal.\n2. COT report: Institutional traders are ",
+      "News Analyst": "Analyzing recent news, the USD/JPY pair is influenced by several factors. \n\n1. No immediate market-moving events are scheduled, but the recent Japanese yen intervention is significant.\n2. Geopolitical"
+    },
+    "debate_rounds": 2,
+    "outcome": "pending",
+    "reflection": ""
+  },
+  {
+    "id": 8,
+    "date": "2026-05-11 08:37:13",
+    "pair": "USD_JPY",
+    "action": "SELL",
+    "confidence": 68,
+    "stop_loss": 0,
+    "take_profit": 0,
+    "position_size": 0.05,
+    "reasoning": "Executing SELL based on analyst consensus and approved risk",
+    "analyst_summary": {
+      "Technical Analyst": "**Technical Analysis Report: USD_JPY**\n\n1. **Overall Trend Direction**: The trend direction is conflicting across timeframes, with H1 being bullish and H4 being bearish. However, considering the highe",
+      "Fundamental Analyst": "As a forex fundamental analyst, I analyze USD_JPY from a macroeconomic perspective. \n\n1. **Interest rate differential**: The US Federal Reserve (Fed) has been maintaining a hawkish stance, with intere",
+      "Sentiment Analyst": "Analyzing current market sentiment for USD_JPY:\n\n1. **Retail trader positioning**: 72% of retail traders are long USD_JPY, indicating a contrarian bearish signal.\n2. **COT report**: Institutional posi",
+      "News Analyst": "Analyzing recent news, the USD_JPY pair is influenced by several factors. \n\n1. No immediate market-moving events are scheduled, but the recent Japanese yen intervention is significant.\n2. Geopolitical"
+    },
+    "debate_rounds": 2,
+    "outcome": "pending",
+    "reflection": ""
+  },
+  {
+    "id": 9,
+    "date": "2026-05-11 08:41:21",
+    "pair": "USD_JPY",
+    "action": "SELL",
+    "confidence": 68,
+    "stop_loss": 0,
+    "take_profit": 0,
+    "position_size": 0.05,
+    "reasoning": "Executing SELL based on analyst consensus and approved risk",
+    "analyst_summary": {
+      "Technical Analyst": "**Technical Analysis Report: USD_JPY**\n\n1. **Overall Trend Direction**: The trend direction is mixed, with a bullish trend on the H1 timeframe and a bearish trend on the H4 timeframe, indicating a pot",
+      "Fundamental Analyst": "From a macroeconomic perspective, the USD/JPY exchange rate is influenced by several key factors. \n\n1. Interest rate differential: The Federal Reserve (Fed) has been maintaining a relatively high inte",
+      "Sentiment Analyst": "Analyzing current market sentiment for USD_JPY:\n\n1. **Retail trader positioning**: 72% of retail traders are long USD_JPY, indicating a contrarian bearish signal.\n2. **COT report**: Institutional posi",
+      "News Analyst": "Analyzing recent news, the USD_JPY pair is influenced by several factors. \n\n1. No immediate market-moving events are scheduled, but the recent Japanese yen intervention is a significant development.\n2"
+    },
+    "debate_rounds": 2,
+    "outcome": "pending",
+    "reflection": ""
+  }
+]
