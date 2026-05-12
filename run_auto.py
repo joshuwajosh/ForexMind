@@ -1,19 +1,20 @@
 """
-ForexMind Auto Runner
-Runs analysis every 15 minutes automatically
-Press Ctrl+C to stop
+ForexMind Auto Runner (IMPROVED)
+- Runs analysis every 15 minutes automatically
+- Fixed: Now includes XAU_USD
+- Press Ctrl+C to stop
 """
 
 import subprocess
 import time
 from datetime import datetime
 
-PAIRS    = ["EUR_USD", "GBP_USD", "USD_JPY"]
-INTERVAL = 1 * 60  # 15 minutes in seconds
+PAIRS    = ["EUR_USD", "GBP_USD", "USD_JPY", "XAU_USD"]  # FIXED: Added XAU_USD
+INTERVAL = 15 * 60  # 15 minutes in seconds
 
 print("""
 ╔══════════════════════════════════════════════════════╗
-║         ForexMind Auto Runner                        ║
+║         ForexMind Auto Runner (IMPROVED)             ║
 ║   Runs every 15 minutes — Press Ctrl+C to stop      ║
 ╚══════════════════════════════════════════════════════╝
 """)
