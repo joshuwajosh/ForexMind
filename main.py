@@ -1,5 +1,5 @@
 """
-ForexMind - Main Orchestrator
+ForexMind - Main Orchestrator (FIXED)
 Analyzes forex pairs and places trades on MT5 demo.
 
 Usage:
@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+import asyncio
 import json
 import os
 import sys
@@ -49,7 +50,7 @@ def print_separator(title=""):
         print("  " + "-" * 40)
 
 
-def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
+async def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
     """
     Full analysis pipeline for one currency pair.
     Returns the final decision dict or None on failure.
@@ -89,13 +90,14 @@ def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
             print(f"    WARNING: Indicator error for {tf}: {e}")
 
     # -- Step 4: Run 4 analysts in parallel -----------------------------------
-    print(f"  [Main] Running analysts...")
+    print(f"  [Main] Running 4 analysts for {pair}...")
     try:
         analysis = run_analysts(pair, data, indicators, llm)
         print(f"    Technical:   {str(analysis.get('technical',   'N/A'))[:60]}")
         print(f"    Fundamental: {str(analysis.get('fundamental', 'N/A'))[:60]}")
         print(f"    Sentiment:   {str(analysis.get('sentiment',   'N/A'))[:60]}")
         print(f"    News:        {str(analysis.get('news',        'N/A'))[:60]}")
+        print(f"    Footprint:   {str(analysis.get('footprint',   'N/A'))[:60]}")
     except Exception as e:
         print(f"  [Main] Analysts error: {e}")
         analysis = {}
@@ -107,12 +109,20 @@ def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
         print(f"    Debate summary: {str(debate_result)[:80]}")
     except Exception as e:
         print(f"  [Main] Debate error: {e}")
-        debate_result = {"summary": "Debate unavailable", "lean": "HOLD"}
+        debate_result = {"summary": "Debate unavailable", "lean": "HOLD", "transcript": []}
 
-    # -- Step 6: Execution pipeline (Trader -> Risk Mgr -> Portfolio Mgr) -----
+    # -- Step 6: Load trade history for context ------
+    history = []
+    try:
+        history = memory.load_history(pair)[-5:]  # Last 5 trades for context
+    except Exception as e:
+        print(f"  [Main] History load warning: {e}")
+
+    # -- Step 7: Execution pipeline (Trader -> Risk Mgr -> Portfolio Mgr) -----
     print(f"  [Main] Running execution pipeline...")
     try:
-        decision = run_execution_pipeline(pair, analysis, debate_result, llm)
+        debate_transcript = debate_result.get("transcript", [])
+        decision = await run_execution_pipeline(pair, analysis, debate_transcript, history, llm)
         print(f"    Action:     {decision.get('action', 'N/A')}")
         print(f"    Confidence: {decision.get('confidence', 'N/A')}%")
         print(f"    Reasoning:  {str(decision.get('reasoning', 'N/A'))[:80]}")
@@ -120,7 +130,7 @@ def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
         print(f"  [Main] Execution pipeline error: {e}")
         decision = {"action": "HOLD", "confidence": 0, "reasoning": str(e)}
 
-    # -- Step 7: Place order if BUY or SELL -----------------------------------
+    # -- Step 8: Place order if BUY or SELL -----------------------------------
     action = decision.get("action", "HOLD").upper()
 
     if action in ("BUY", "SELL"):
@@ -147,7 +157,7 @@ def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
     else:
         print(f"  [Main] Decision is HOLD -- no order placed")
 
-    # -- Step 8: Send Telegram alert ------------------------------------------
+    # -- Step 9: Send Telegram alert ------------------------------------------
     try:
         telegram.send_signal(
             pair=pair,
@@ -160,7 +170,7 @@ def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
     except Exception as e:
         print(f"  [Main] Telegram error: {e}")
 
-    # -- Step 9: Save to memory -----------------------------------------------
+    # -- Step 10: Save to memory -----------------------------------------------
     try:
         memory.save(pair, decision)
     except Exception as e:
@@ -169,7 +179,7 @@ def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
     return decision
 
 
-def main():
+async def main():
     # -- Parse arguments ------------------------------------------------------
     parser = argparse.ArgumentParser(description="ForexMind AI Bot")
     parser.add_argument("--pair",   type=str, default=None,
@@ -209,7 +219,7 @@ def main():
     results = {}
     for pair in pairs:
         try:
-            result = analyze_pair(
+            result = await analyze_pair(
                 pair=pair,
                 rounds=args.rounds,
                 llm=llm,
@@ -241,4 +251,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
