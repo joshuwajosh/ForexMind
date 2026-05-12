@@ -1,14 +1,35 @@
 """
-ForexMind — Execution Pipeline
+ForexMind — Execution Pipeline (OPTIMIZED)
 Trader Agent → Risk Manager → Portfolio Manager
-FIXED: Lower confidence threshold + cleared pending memory confusion
+CHANGES: Dynamic position sizing + aggressive prompts + lower thresholds
 """
 
 import json
 import time
 from typing import Dict, List
 from utils.llm import GroqClient
-from config.settings import RISK_PER_TRADE_PCT, DEFAULT_LOT_SIZE
+from config.settings import (
+    RISK_PER_TRADE_PCT, 
+    MIN_CONFIDENCE_TO_TRADE,
+    MIN_CONFIDENCE_TO_OVERRIDE,
+    POSITION_SIZING
+)
+
+
+def get_position_size(confidence: int) -> float:
+    """
+    Get position size based on confidence level (DYNAMIC SIZING).
+    
+    Higher confidence = bigger position (more upside on good trades).
+    """
+    sorted_confidence = sorted(POSITION_SIZING.keys())
+    
+    for conf_level in sorted_confidence:
+        if confidence >= conf_level:
+            position_size = POSITION_SIZING[conf_level]
+    
+    # If confidence below all thresholds, use minimum
+    return position_size if 'position_size' in locals() else POSITION_SIZING[sorted_confidence[0]]
 
 
 async def trader_agent(pair: str, analyst_reports: Dict[str, str],
@@ -40,8 +61,9 @@ DEBATE SUMMARY:
 Rules:
 - If bullish signals outweigh bearish → BUY
 - If bearish signals outweigh bullish → SELL
-- Only say HOLD if signals are completely mixed 50/50
-- Be decisive! Markets reward action.
+- ONLY say HOLD if signals are completely neutral (happens rarely!)
+- Be DECISIVE! Markets reward action. Hesitation costs money.
+- Recommend confidence 65%+ to be traded
 
 Current {pair} price context: use realistic current market prices.
 
@@ -79,16 +101,20 @@ Respond ONLY with this exact JSON (no other text):
         # Default to a decision based on debate
         trade = {
             "action":        "BUY",
-            "confidence":    65,
+            "confidence":    68,
             "entry_price":   "MARKET",
             "stop_loss":     0,
             "take_profit":   0,
-            "position_size": DEFAULT_LOT_SIZE,
+            "position_size": get_position_size(68),
             "timeframe":     "H1",
-            "reasoning":     "Default buy based on general bullish bias."
+            "reasoning":     "Default BUY based on general bullish bias."
         }
 
-    print(f"    [Trader] Proposed: {trade.get('action')} with {trade.get('confidence')}% confidence")
+    # Ensure position size is calculated dynamically
+    if "position_size" not in trade or trade["position_size"] == 0:
+        trade["position_size"] = get_position_size(trade.get("confidence", 60))
+
+    print(f"    [Trader] Proposed: {trade.get('action')} ({trade.get('confidence')}%) | Size: {trade.get('position_size')} lots")
     return trade
 
 
@@ -107,6 +133,7 @@ async def risk_manager(pair: str, trade_proposal: dict,
 TRADE PROPOSAL for {pair}:
 - Action: {action}
 - Confidence: {confidence}%
+- Position size: {trade_proposal.get('position_size', 0.01)}
 - Max risk per trade: {RISK_PER_TRADE_PCT}%
 
 Evaluate and respond ONLY with this exact JSON:
@@ -115,15 +142,15 @@ Evaluate and respond ONLY with this exact JSON:
   "adjusted_position_size": 0.05,
   "risk_score": 5,
   "risk_reward_ratio": 2.0,
-  "concerns": ["one concern max"],
-  "recommendation": "Approve with standard risk management"
+  "concerns": ["concern if any"],
+  "recommendation": "Approve or reject with reasoning"
 }}
 
 Rules:
-- Approve if confidence >= 60%
-- Risk score should be 4-6 for normal trades
-- Always include a stop loss suggestion
-- Don't be overly cautious — this is a demo account"""
+- Approve if confidence >= {MIN_CONFIDENCE_TO_TRADE}%
+- Risk score should be 3-7 for normal trades
+- Always include risk/reward ratio
+- Don't be overly cautious — this is a demo account for learning"""
 
     response = llm.call(prompt)
 
@@ -143,16 +170,16 @@ Rules:
     except Exception as e:
         print(f"    [Risk Manager] JSON parse failed: {e}")
         risk = {
-            "approved":               confidence >= 60,
-            "adjusted_position_size": DEFAULT_LOT_SIZE,
+            "approved":               confidence >= MIN_CONFIDENCE_TO_TRADE,
+            "adjusted_position_size": trade_proposal.get("position_size", 0.01),
             "risk_score":             5,
             "risk_reward_ratio":      2.0,
             "concerns":               [],
-            "recommendation":         "Standard risk assessment"
+            "recommendation":         "Standard assessment"
         }
 
-    status = "APPROVED ✓" if risk.get("approved") else "REJECTED ✗"
-    print(f"    [Risk Manager] {status} — Risk Score: {risk.get('risk_score')}/10")
+    status = "✓ APPROVED" if risk.get("approved") else "✗ REJECTED"
+    print(f"    [Risk Manager] {status} — Risk: {risk.get('risk_score')}/10 | RR: {risk.get('risk_reward_ratio')}:1")
     return risk
 
 
@@ -168,6 +195,7 @@ async def portfolio_manager(pair: str, analyst_reports: Dict[str, str],
     risk_approved = risk_assessment.get("approved", False)
     action        = trade_proposal.get("action", "HOLD")
     confidence    = trade_proposal.get("confidence", 50)
+    position_size = trade_proposal.get("position_size", 0.01)
 
     # Only show last 2 trades in history to avoid confusion
     recent_history = ""
@@ -180,14 +208,14 @@ async def portfolio_manager(pair: str, analyst_reports: Dict[str, str],
     prompt = f"""You are the PORTFOLIO MANAGER making the FINAL trading decision for {pair}.
 
 SITUATION:
-- Trader proposes: {action} with {confidence}% confidence
-- Risk assessment: {"APPROVED" if risk_approved else "REJECTED"}
+- Trader proposes: {action} with {confidence}% confidence ({position_size} lots)
+- Risk assessment: {"APPROVED ✓" if risk_approved else "REJECTED ✗"}
 - {recent_history}
 
 DECISION RULES:
-- If action is BUY or SELL AND confidence >= 60% AND risk approved → EXECUTE the trade
-- If confidence >= 75% → override even if risk rejected
-- Only HOLD if confidence < 60% or signals completely unclear
+- If action BUY/SELL AND confidence >= {MIN_CONFIDENCE_TO_TRADE}% AND risk approved → EXECUTE
+- If confidence >= {MIN_CONFIDENCE_TO_OVERRIDE}% → override risk rejection (take the trade!)
+- Otherwise HOLD
 
 You MUST be decisive. The market is open. Make a call.
 
@@ -195,10 +223,10 @@ Respond ONLY with this exact JSON:
 {{
   "action": "{action}",
   "confidence": {confidence},
-  "position_size": 0.05,
+  "position_size": {position_size},
   "stop_loss": 0,
   "take_profit": 0,
-  "reasoning": "Executing {action} based on analyst consensus and approved risk",
+  "reasoning": "Your reasoning here",
   "rejected_reason": ""
 }}"""
 
@@ -219,15 +247,25 @@ Respond ONLY with this exact JSON:
         final = json.loads(response)
     except Exception as e:
         print(f"    [Portfolio Manager] JSON parse failed: {e}")
-        # If risk approved and confidence >= 60, execute
-        if risk_approved and confidence >= 60 and action != "HOLD":
+        # If risk approved and confidence high enough, execute
+        if risk_approved and confidence >= MIN_CONFIDENCE_TO_TRADE and action != "HOLD":
             final = {
                 "action":          action,
                 "confidence":      confidence,
-                "position_size":   DEFAULT_LOT_SIZE,
+                "position_size":   position_size,
                 "stop_loss":       0,
                 "take_profit":     0,
-                "reasoning":       f"Executing {action} — analyst consensus with {confidence}% confidence.",
+                "reasoning":       f"Executing {action} — analyst consensus {confidence}% confidence.",
+                "rejected_reason": ""
+            }
+        elif confidence >= MIN_CONFIDENCE_TO_OVERRIDE and action != "HOLD":
+            final = {
+                "action":          action,
+                "confidence":      confidence,
+                "position_size":   position_size,
+                "stop_loss":       0,
+                "take_profit":     0,
+                "reasoning":       f"HIGH CONVICTION OVERRIDE — {confidence}% confidence trumps risk.",
                 "rejected_reason": ""
             }
         else:
@@ -238,12 +276,13 @@ Respond ONLY with this exact JSON:
                 "stop_loss":       0,
                 "take_profit":     0,
                 "reasoning":       "Insufficient confidence to trade.",
-                "rejected_reason": "Below threshold"
+                "rejected_reason": "Below execution threshold"
             }
 
     action_out = final.get("action", "HOLD")
     emoji = "🟢 BUY" if action_out == "BUY" else "🔴 SELL" if action_out == "SELL" else "⚪ HOLD"
-    print(f"    [Portfolio Manager] FINAL: {emoji} ({final.get('confidence')}%)")
+    size = final.get("position_size", 0)
+    print(f"    [Portfolio Manager] FINAL: {emoji} {size} lots ({final.get('confidence')}%)")
     return final
 
 
