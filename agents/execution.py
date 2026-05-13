@@ -1,164 +1,148 @@
 """
-ForexMind — Execution Pipeline (OPTIMIZED)
+ForexMind — Execution Pipeline (ENHANCED)
 Trader Agent → Risk Manager → Portfolio Manager
-CHANGES: Dynamic position sizing + aggressive prompts + lower thresholds
+Features: Dynamic position sizing + debate-aware + aggressive trading
 """
 
 import json
 import time
 from typing import Dict, List
 from utils.llm import GroqClient
-from config.settings import (
-    RISK_PER_TRADE_PCT, 
-    MIN_CONFIDENCE_TO_TRADE,
-    MIN_CONFIDENCE_TO_OVERRIDE,
-    POSITION_SIZING
-)
+from config.settings import RISK_PER_TRADE_PCT, DEFAULT_LOT_SIZE
 
 
 def get_position_size(confidence: int) -> float:
     """
-    Get position size based on confidence level (DYNAMIC SIZING).
+    Dynamic position sizing based on confidence level.
+    Higher confidence = bigger position (leverage conviction).
     
-    Higher confidence = bigger position (more upside on good trades).
+    55-60% confidence → 0.01 lot (minimal)
+    60-70% confidence → 0.02 lot (small)
+    70-80% confidence → 0.03 lot (medium)
+    80%+ confidence → 0.05 lot (full)
     """
-    sorted_confidence = sorted(POSITION_SIZING.keys())
-    
-    for conf_level in sorted_confidence:
-        if confidence >= conf_level:
-            position_size = POSITION_SIZING[conf_level]
-    
-    # If confidence below all thresholds, use minimum
-    return position_size if 'position_size' in locals() else POSITION_SIZING[sorted_confidence[0]]
+    if confidence < 55:
+        return 0.01
+    elif confidence < 60:
+        return 0.01
+    elif confidence < 70:
+        return 0.02
+    elif confidence < 80:
+        return 0.03
+    elif confidence < 85:
+        return 0.04
+    else:
+        return 0.05
 
 
 async def trader_agent(pair: str, analyst_reports: Dict[str, str],
-                       debate_transcript: List[dict], llm: GroqClient) -> dict:
-    """Trader reads all reports and debate, proposes a trade."""
+                       debate_result: dict, llm: GroqClient) -> dict:
+    """Trader reads reports and debate, proposes a trade using debate lean."""
 
     print("    [Trader] Reading analyst reports and debate...")
 
     combined_reports = "\n\n".join([
-        f"=== {name} ===\n{report[:500]}"
+        f"=== {name} ===\n{report[:350]}"
         for name, report in analyst_reports.items()
     ])
 
-    debate_summary = ""
-    for r in debate_transcript:
-        debate_summary += f"\nRound {r['round']}:"
-        debate_summary += f"\nBULL: {r['bull_argument'][:150]}"
-        debate_summary += f"\nBEAR: {r['bear_argument'][:150]}"
+    debate_lean = debate_result.get("lean", "NEUTRAL")
+    debate_confidence = debate_result.get("confidence", 50)
 
     prompt = f"""You are an aggressive forex TRADER at a hedge fund.
-Analyze {pair} and propose a specific trade.
 
-ANALYST REPORTS SUMMARY:
-{combined_reports[:1200]}
+ANALYST REPORTS:
+{combined_reports}
 
-DEBATE SUMMARY:
-{debate_summary[:600]}
+DEBATE RESULT: {debate_lean} ({debate_confidence}% confidence)
+
+Your job: Propose a specific trade for {pair}.
 
 Rules:
-- If bullish signals outweigh bearish → BUY
-- If bearish signals outweigh bullish → SELL
-- ONLY say HOLD if signals are completely neutral (happens rarely!)
-- Be DECISIVE! Markets reward action. Hesitation costs money.
-- Recommend confidence 65%+ to be traded
+- If debate is BULLISH → recommend BUY (with confidence >= 65%)
+- If debate is BEARISH → recommend SELL (with confidence >= 65%)
+- If debate is NEUTRAL → analyze reports carefully, propose if signals clear
+- ALWAYS be more aggressive for high-conviction signals
+- Position sizing: 55%=0.01, 70%=0.02, 80%=0.04, 85%+=0.05 lots
+- Avoid HOLD — only use if truly uncertain
 
-Current {pair} price context: use realistic current market prices.
-
-Respond ONLY with this exact JSON (no other text):
+Respond ONLY with this JSON (no other text):
 {{
   "action": "BUY",
-  "confidence": 72,
-  "entry_price": "MARKET",
-  "stop_loss": 0,
-  "take_profit": 0,
-  "position_size": 0.05,
-  "timeframe": "H1",
-  "reasoning": "Brief reason here"
+  "confidence": 75,
+  "position_size": 0.03,
+  "reasoning": "Debate BULLISH + strong technical signals"
 }}"""
 
     response = llm.call(prompt)
 
     try:
         response = response.strip()
-        # Clean markdown code blocks
         if "```" in response:
-            parts = response.split("```")
-            for part in parts:
+            for part in response.split("```"):
                 if "{" in part:
                     response = part.replace("json", "").strip()
                     break
-        # Find JSON object
         start = response.find("{")
         end   = response.rfind("}") + 1
         if start >= 0 and end > start:
             response = response[start:end]
         trade = json.loads(response)
-    except Exception as e:
-        print(f"    [Trader] JSON parse failed: {e}")
-        # Default to a decision based on debate
-        trade = {
-            "action":        "BUY",
-            "confidence":    68,
-            "entry_price":   "MARKET",
-            "stop_loss":     0,
-            "take_profit":   0,
-            "position_size": get_position_size(68),
-            "timeframe":     "H1",
-            "reasoning":     "Default BUY based on general bullish bias."
-        }
-
-    # Ensure position size is calculated dynamically
-    if "position_size" not in trade or trade["position_size"] == 0:
+        
+        # Auto-fix position size based on confidence
         trade["position_size"] = get_position_size(trade.get("confidence", 60))
+        
+    except Exception as e:
+        print(f"    [Trader] Parse error: {e}")
+        # Fallback: follow debate lean
+        if debate_lean == "BULLISH":
+            trade = {"action": "BUY", "confidence": debate_confidence, "position_size": get_position_size(debate_confidence), "reasoning": "Debate BULLISH"}
+        elif debate_lean == "BEARISH":
+            trade = {"action": "SELL", "confidence": debate_confidence, "position_size": get_position_size(debate_confidence), "reasoning": "Debate BEARISH"}
+        else:
+            trade = {"action": "HOLD", "confidence": 50, "position_size": 0.01, "reasoning": "Debate neutral"}
 
-    print(f"    [Trader] Proposed: {trade.get('action')} ({trade.get('confidence')}%) | Size: {trade.get('position_size')} lots")
+    print(f"    [Trader] Proposed: {trade.get('action')} with {trade.get('confidence')}% confidence | Size: {trade.get('position_size')} lots")
     return trade
 
 
-async def risk_manager(pair: str, trade_proposal: dict,
-                       llm: GroqClient) -> dict:
-    """Risk manager evaluates the trade proposal."""
+async def risk_manager(pair: str, trade_proposal: dict, llm: GroqClient) -> dict:
+    """Risk manager evaluates proposal with lenient demo-account rules."""
 
     print("    [Risk Manager] Evaluating risk...")
-    time.sleep(1)
+    time.sleep(0.5)
 
-    action     = trade_proposal.get("action", "HOLD")
+    action = trade_proposal.get("action", "HOLD")
     confidence = trade_proposal.get("confidence", 50)
+    
+    if action == "HOLD":
+        return {"approved": True, "risk_score": 0, "adjusted_position_size": 0}
 
-    prompt = f"""You are a forex RISK MANAGER. Be reasonable, not overly cautious.
+    prompt = f"""You are a RISK MANAGER for a DEMO account trading {pair}.
 
-TRADE PROPOSAL for {pair}:
-- Action: {action}
-- Confidence: {confidence}%
-- Position size: {trade_proposal.get('position_size', 0.01)}
-- Max risk per trade: {RISK_PER_TRADE_PCT}%
+TRADE: {action} with {confidence}% confidence
+Position size proposed: {trade_proposal.get('position_size', 0.01)} lots
 
-Evaluate and respond ONLY with this exact JSON:
+Respond ONLY with this JSON:
 {{
   "approved": true,
-  "adjusted_position_size": 0.05,
   "risk_score": 5,
-  "risk_reward_ratio": 2.0,
-  "concerns": ["concern if any"],
-  "recommendation": "Approve or reject with reasoning"
+  "adjusted_position_size": 0.02
 }}
 
-Rules:
-- Approve if confidence >= {MIN_CONFIDENCE_TO_TRADE}%
-- Risk score should be 3-7 for normal trades
-- Always include risk/reward ratio
-- Don't be overly cautious — this is a demo account for learning"""
+Rules for DEMO account:
+- Approve any trade with confidence >= 55%
+- Confidence >= 75% → auto-approve regardless
+- Risk score: 1-10 (higher = riskier)
+- Adjust position size if unrealistic
+- DEMO = learning environment, take reasonable risks"""
 
     response = llm.call(prompt)
 
     try:
         response = response.strip()
         if "```" in response:
-            parts = response.split("```")
-            for part in parts:
+            for part in response.split("```"):
                 if "{" in part:
                     response = part.replace("json", "").strip()
                     break
@@ -168,75 +152,59 @@ Rules:
             response = response[start:end]
         risk = json.loads(response)
     except Exception as e:
-        print(f"    [Risk Manager] JSON parse failed: {e}")
+        print(f"    [Risk Manager] Parse error: {e}")
         risk = {
-            "approved":               confidence >= MIN_CONFIDENCE_TO_TRADE,
-            "adjusted_position_size": trade_proposal.get("position_size", 0.01),
-            "risk_score":             5,
-            "risk_reward_ratio":      2.0,
-            "concerns":               [],
-            "recommendation":         "Standard assessment"
+            "approved": confidence >= 55,
+            "risk_score": 5,
+            "adjusted_position_size": trade_proposal.get("position_size", 0.01)
         }
 
     status = "✓ APPROVED" if risk.get("approved") else "✗ REJECTED"
-    print(f"    [Risk Manager] {status} — Risk: {risk.get('risk_score')}/10 | RR: {risk.get('risk_reward_ratio')}:1")
+    print(f"    [Risk Manager] {status} | Risk Score: {risk.get('risk_score')}/10")
     return risk
 
 
 async def portfolio_manager(pair: str, analyst_reports: Dict[str, str],
-                             debate_transcript: List[dict],
+                             debate_result: dict,
                              trade_proposal: dict, risk_assessment: dict,
                              history: list, llm: GroqClient) -> dict:
-    """Portfolio Manager makes the final decision."""
+    """Portfolio Manager makes final decision."""
 
     print("    [Portfolio Manager] Making final decision...")
-    time.sleep(1)
+    time.sleep(0.5)
 
+    action = trade_proposal.get("action", "HOLD")
+    confidence = trade_proposal.get("confidence", 50)
     risk_approved = risk_assessment.get("approved", False)
-    action        = trade_proposal.get("action", "HOLD")
-    confidence    = trade_proposal.get("confidence", 50)
-    position_size = trade_proposal.get("position_size", 0.01)
+    debate_lean = debate_result.get("lean", "NEUTRAL")
 
-    # Only show last 2 trades in history to avoid confusion
-    recent_history = ""
-    if history:
-        last2 = history[-2:]
-        recent_history = f"Last {len(last2)} trades: " + ", ".join(
-            [f"{h.get('action','?')} ({h.get('date','?')[:10]})" for h in last2]
-        )
-
-    prompt = f"""You are the PORTFOLIO MANAGER making the FINAL trading decision for {pair}.
+    prompt = f"""You are PORTFOLIO MANAGER for {pair}.
 
 SITUATION:
-- Trader proposes: {action} with {confidence}% confidence ({position_size} lots)
-- Risk assessment: {"APPROVED ✓" if risk_approved else "REJECTED ✗"}
-- {recent_history}
+- Trader proposes: {action} ({confidence}% confidence)
+- Risk Manager: {"APPROVED ✓" if risk_approved else "REJECTED ✗"}
+- Debate lean: {debate_lean}
 
-DECISION RULES:
-- If action BUY/SELL AND confidence >= {MIN_CONFIDENCE_TO_TRADE}% AND risk approved → EXECUTE
-- If confidence >= {MIN_CONFIDENCE_TO_OVERRIDE}% → override risk rejection (take the trade!)
-- Otherwise HOLD
-
-You MUST be decisive. The market is open. Make a call.
-
-Respond ONLY with this exact JSON:
+FINAL DECISION (respond with JSON only):
 {{
   "action": "{action}",
   "confidence": {confidence},
-  "position_size": {position_size},
-  "stop_loss": 0,
-  "take_profit": 0,
-  "reasoning": "Your reasoning here",
-  "rejected_reason": ""
-}}"""
+  "position_size": 0.02
+}}
+
+RULES:
+- If action=BUY/SELL AND confidence>=55% AND risk approved → EXECUTE
+- If confidence>=75% → EXECUTE even if risk rejected
+- If action=HOLD → approve as-is
+- DEMO account → be aggressive but not reckless
+- Only HOLD if truly uncertain"""
 
     response = llm.call(prompt)
 
     try:
         response = response.strip()
         if "```" in response:
-            parts = response.split("```")
-            for part in parts:
+            for part in response.split("```"):
                 if "{" in part:
                     response = part.replace("json", "").strip()
                     break
@@ -246,65 +214,48 @@ Respond ONLY with this exact JSON:
             response = response[start:end]
         final = json.loads(response)
     except Exception as e:
-        print(f"    [Portfolio Manager] JSON parse failed: {e}")
-        # If risk approved and confidence high enough, execute
-        if risk_approved and confidence >= MIN_CONFIDENCE_TO_TRADE and action != "HOLD":
+        print(f"    [Portfolio Manager] Parse error: {e}")
+        # Fallback logic
+        if (risk_approved and confidence >= 55 and action != "HOLD") or confidence >= 75:
             final = {
-                "action":          action,
-                "confidence":      confidence,
-                "position_size":   position_size,
-                "stop_loss":       0,
-                "take_profit":     0,
-                "reasoning":       f"Executing {action} — analyst consensus {confidence}% confidence.",
-                "rejected_reason": ""
-            }
-        elif confidence >= MIN_CONFIDENCE_TO_OVERRIDE and action != "HOLD":
-            final = {
-                "action":          action,
-                "confidence":      confidence,
-                "position_size":   position_size,
-                "stop_loss":       0,
-                "take_profit":     0,
-                "reasoning":       f"HIGH CONVICTION OVERRIDE — {confidence}% confidence trumps risk.",
-                "rejected_reason": ""
+                "action": action,
+                "confidence": confidence,
+                "position_size": trade_proposal.get("position_size", 0.01)
             }
         else:
             final = {
-                "action":          "HOLD",
-                "confidence":      confidence,
-                "position_size":   0,
-                "stop_loss":       0,
-                "take_profit":     0,
-                "reasoning":       "Insufficient confidence to trade.",
-                "rejected_reason": "Below execution threshold"
+                "action": "HOLD",
+                "confidence": confidence,
+                "position_size": 0
             }
 
     action_out = final.get("action", "HOLD")
     emoji = "🟢 BUY" if action_out == "BUY" else "🔴 SELL" if action_out == "SELL" else "⚪ HOLD"
     size = final.get("position_size", 0)
-    print(f"    [Portfolio Manager] FINAL: {emoji} {size} lots ({final.get('confidence')}%)")
+    print(f"    [Portfolio Manager] FINAL: {emoji} ({final.get('confidence')}%) | Size: {size} lots")
     return final
 
 
 async def run_execution_pipeline(pair: str, analyst_reports: Dict[str, str],
-                                  debate_transcript: List[dict],
+                                  debate_result: dict,
                                   history: list, llm: GroqClient) -> dict:
-    """Run the full Trader → Risk → Portfolio pipeline."""
+    """Run Trader → Risk Manager → Portfolio Manager pipeline."""
 
-    trade_proposal  = await trader_agent(pair, analyst_reports, debate_transcript, llm)
+    trade_proposal = await trader_agent(pair, analyst_reports, debate_result, llm)
     risk_assessment = await risk_manager(pair, trade_proposal, llm)
-    final_decision  = await portfolio_manager(
+    final_decision = await portfolio_manager(
         pair=pair,
         analyst_reports=analyst_reports,
-        debate_transcript=debate_transcript,
+        debate_result=debate_result,
         trade_proposal=trade_proposal,
         risk_assessment=risk_assessment,
         history=history,
         llm=llm
     )
 
-    final_decision["pair"]            = pair
-    final_decision["trade_proposal"]  = trade_proposal
+    final_decision["pair"] = pair
+    final_decision["trade_proposal"] = trade_proposal
     final_decision["risk_assessment"] = risk_assessment
+    final_decision["debate_result"] = debate_result
 
     return final_decision
