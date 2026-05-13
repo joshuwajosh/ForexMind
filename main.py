@@ -1,6 +1,6 @@
 """
-ForexMind - Main Orchestrator (FIXED)
-Analyzes forex pairs and places trades on MT5 demo.
+ForexMind - Main Orchestrator (ENHANCED)
+Analyzes forex pairs and places trades on MT5 demo with dynamic position sizing.
 
 Usage:
   python main.py                        -- runs all pairs
@@ -37,7 +37,7 @@ from memory.manager import MemoryManager
 def print_header():
     print("")
     print("=" * 60)
-    print("  ForexMind AI Trading Bot")
+    print("  ForexMind AI Trading Bot (Enhanced)")
     print(f"  Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
@@ -60,7 +60,7 @@ async def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
     # -- Step 1: Check for existing open position -----------------------------
     existing = executor.get_open_positions(pair)
     if existing:
-        print(f"  [Main] Position already open for {pair} -- skipping order placement")
+        print(f"  [Main] Position already open for {pair} -- skipping")
         for pos in existing:
             print(f"    Ticket #{pos['ticket']} | {pos['type']} | P&L: ${pos['profit']}")
         return None
@@ -69,12 +69,13 @@ async def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
     print(f"  [Main] Fetching data for {pair}...")
     data = {}
     for tf in DEFAULT_TIMEFRAMES:
-        ohlcv = fetcher.get_candles(pair, tf)
-        if ohlcv:
-            data[tf] = ohlcv
-            print(f"    Got {len(ohlcv)} bars for {tf}")
-        else:
-            print(f"    WARNING: No data for {pair} {tf}")
+        try:
+            ohlcv = fetcher.get_candles(pair, tf)
+            if ohlcv:
+                data[tf] = ohlcv
+                print(f"    Got {len(ohlcv)} bars for {tf}")
+        except Exception as e:
+            print(f"    WARNING: No data for {pair} {tf}: {e}")
 
     if not data:
         print(f"  [Main] ERROR: No data at all for {pair} -- skipping")
@@ -96,19 +97,21 @@ async def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
     print(f"  [Main] Running 4 analysts for {pair}...")
     try:
         analysis = await run_analysts(pair, DEFAULT_TIMEFRAMES, llm)
-        print(f"    Technical:   {str(list(analysis.values())[0])[:60]}")
-        print(f"    Fundamental: {str(list(analysis.values())[1])[:60]}")
-        print(f"    Sentiment:   {str(list(analysis.values())[2])[:60]}")
-        print(f"    News:        {str(list(analysis.values())[3])[:60]}")
+        analyst_list = list(analysis.items())
+        for name, report in analyst_list:
+            preview = str(report)[:50] if report else "N/A"
+            print(f"    {name}: {preview}...")
     except Exception as e:
         print(f"  [Main] Analysts error: {e}")
         analysis = {}
 
-    # -- Step 5: Bull vs Bear debate ------------------------------------------
+    # -- Step 5: Bull vs Bear debate with market context ----------------------
     print(f"  [Main] Running Bull vs Bear debate ({rounds} rounds)...")
     try:
         debate_result = await run_debate(pair, analysis, rounds, llm, current_indicators)
-        print(f"    Debate lean: {debate_result.get('lean')} ({debate_result.get('confidence')}%)")
+        lean = debate_result.get("lean", "NEUTRAL")
+        conf = debate_result.get("confidence", 50)
+        print(f"    Debate lean: {lean} ({conf}% confidence)")
     except Exception as e:
         print(f"  [Main] Debate error: {e}")
         debate_result = {"lean": "NEUTRAL", "confidence": 50, "transcript": []}
@@ -116,9 +119,9 @@ async def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
     # -- Step 6: Load trade history for context ------
     history = []
     try:
-        history = memory.get_history(pair)[-5:]  # Last 5 trades for context
+        history = memory.get_history(pair)[-5:]  # Last 5 trades
     except Exception as e:
-        print(f"  [Main] History load warning: {e}")
+        print(f"  [Main] History note: {e}")
 
     # -- Step 7: Execution pipeline (Trader -> Risk Mgr -> Portfolio Mgr) -----
     print(f"  [Main] Running execution pipeline...")
@@ -126,37 +129,34 @@ async def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
         decision = await run_execution_pipeline(pair, analysis, debate_result, history, llm)
         print(f"    Action:     {decision.get('action', 'N/A')}")
         print(f"    Confidence: {decision.get('confidence', 'N/A')}%")
-        print(f"    Size:       {decision.get('position_size', 'N/A')} lots")
-        print(f"    Reasoning:  {str(decision.get('reasoning', 'N/A'))[:60]}")
+        print(f"    Position:   {decision.get('position_size', 'N/A')} lots")
     except Exception as e:
-        print(f"  [Main] Execution pipeline error: {e}")
-        decision = {"action": "HOLD", "confidence": 0, "position_size": 0, "reasoning": str(e)}
+        print(f"  [Main] Execution error: {e}")
+        decision = {"action": "HOLD", "confidence": 0, "position_size": 0}
 
     # -- Step 8: Place order if BUY or SELL -----------------------------------
     action = decision.get("action", "HOLD").upper()
 
     if action in ("BUY", "SELL"):
-        # Double-check no position opened since we last checked
+        # Double-check no position opened
         existing_now = executor.get_open_positions(pair)
         if existing_now:
-            print(f"  [Main] Position opened since check -- skipping order")
+            print(f"  [Main] Position already opened -- skipping")
         else:
             print(f"  [Main] Placing {action} order for {pair}...")
             size = decision.get("position_size", DEFAULT_LOT_SIZE)
-            sl = decision.get("sl", 0)
-            tp = decision.get("tp", 0)
             order_result = executor.place_order(
                 pair=pair,
                 action=action,
                 size=size,
-                sl=sl,
-                tp=tp,
+                sl=decision.get("sl", 0),
+                tp=decision.get("tp", 0),
             )
             decision["order_result"] = order_result
             if order_result.get("success"):
-                print(f"  [Main] Order placed -- Ticket #{order_result.get('ticket')}")
+                print(f"  [Main] ✓ Order placed -- Ticket #{order_result.get('ticket')}")
             else:
-                print(f"  [Main] Order failed -- {order_result.get('reason')}")
+                print(f"  [Main] ✗ Order failed -- {order_result.get('reason')}")
     else:
         print(f"  [Main] Decision is HOLD -- no order placed")
 
@@ -167,17 +167,15 @@ async def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
             action=action,
             confidence=decision.get("confidence", 0),
             reasoning=decision.get("reasoning", ""),
-            sl=decision.get("sl", "N/A"),
-            tp=decision.get("tp", "N/A"),
         )
     except Exception as e:
-        print(f"  [Main] Telegram error: {e}")
+        print(f"  [Main] Telegram warning: {e}")
 
     # -- Step 10: Save to memory -----------------------------------------------
     try:
         memory.save_decision(pair, decision, analysis, debate_result.get("transcript", []))
     except Exception as e:
-        print(f"  [Main] Memory save error: {e}")
+        print(f"  [Main] Memory warning: {e}")
 
     return decision
 
@@ -233,7 +231,7 @@ async def main():
             )
             results[pair] = result
         except Exception as e:
-            print(f"  [Main] UNHANDLED ERROR for {pair}: {e}")
+            print(f"  [Main] ERROR for {pair}: {e}")
             results[pair] = None
         time.sleep(2)
 
@@ -241,17 +239,15 @@ async def main():
     print_separator("Summary")
     for pair, result in results.items():
         if result is None:
-            print(f"  {pair}: SKIPPED or ERROR")
+            print(f"  {pair}: ERROR or SKIPPED")
         else:
             action = result.get("action", "N/A")
             conf   = result.get("confidence", 0)
             size   = result.get("position_size", 0)
-            print(f"  {pair}: {action} ({conf}% confidence) | Size: {size} lots")
+            print(f"  {pair}: {action} ({conf}%) | {size} lots")
 
-    print("")
-    print(f"  Run complete: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 60)
-    print("")
+    print(f"\n  Run complete: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":
