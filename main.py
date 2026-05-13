@@ -27,7 +27,7 @@ from utils.llm import get_llm
 from utils.telegram import TelegramNotifier
 from utils.mt5_executor import MT5Executor
 from data.fetcher import MT5Client as DataFetcher
-from data.indicators import Indicators
+from data.indicators import get_all_indicators
 from agents.analysts import run_analysts
 from agents.researchers import run_debate
 from agents.execution import run_execution_pipeline
@@ -83,21 +83,23 @@ async def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
     # -- Step 3: Calculate indicators -----------------------------------------
     print(f"  [Main] Calculating indicators...")
     indicators = {}
-    for tf, df in data.items():
+    current_indicators = None
+    for tf, ohlcv in data.items():
         try:
-            indicators[tf] = Indicators.calculate_all(df)
+            indicators[tf] = get_all_indicators(ohlcv)
+            if tf == DEFAULT_TIMEFRAMES[0]:  # Use first timeframe for market context
+                current_indicators = indicators[tf]
         except Exception as e:
             print(f"    WARNING: Indicator error for {tf}: {e}")
 
     # -- Step 4: Run 4 analysts in parallel -----------------------------------
     print(f"  [Main] Running 4 analysts for {pair}...")
     try:
-        analysis = run_analysts(pair, data, indicators, llm)
-        print(f"    Technical:   {str(analysis.get('technical',   'N/A'))[:60]}")
-        print(f"    Fundamental: {str(analysis.get('fundamental', 'N/A'))[:60]}")
-        print(f"    Sentiment:   {str(analysis.get('sentiment',   'N/A'))[:60]}")
-        print(f"    News:        {str(analysis.get('news',        'N/A'))[:60]}")
-        print(f"    Footprint:   {str(analysis.get('footprint',   'N/A'))[:60]}")
+        analysis = await run_analysts(pair, DEFAULT_TIMEFRAMES, llm)
+        print(f"    Technical:   {str(list(analysis.values())[0])[:60]}")
+        print(f"    Fundamental: {str(list(analysis.values())[1])[:60]}")
+        print(f"    Sentiment:   {str(list(analysis.values())[2])[:60]}")
+        print(f"    News:        {str(list(analysis.values())[3])[:60]}")
     except Exception as e:
         print(f"  [Main] Analysts error: {e}")
         analysis = {}
@@ -105,30 +107,30 @@ async def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
     # -- Step 5: Bull vs Bear debate ------------------------------------------
     print(f"  [Main] Running Bull vs Bear debate ({rounds} rounds)...")
     try:
-        debate_result = run_debate(pair, analysis, rounds, llm)
-        print(f"    Debate summary: {str(debate_result)[:80]}")
+        debate_result = await run_debate(pair, analysis, rounds, llm, current_indicators)
+        print(f"    Debate lean: {debate_result.get('lean')} ({debate_result.get('confidence')}%)")
     except Exception as e:
         print(f"  [Main] Debate error: {e}")
-        debate_result = {"summary": "Debate unavailable", "lean": "HOLD", "transcript": []}
+        debate_result = {"lean": "NEUTRAL", "confidence": 50, "transcript": []}
 
     # -- Step 6: Load trade history for context ------
     history = []
     try:
-        history = memory.load_history(pair)[-5:]  # Last 5 trades for context
+        history = memory.get_history(pair)[-5:]  # Last 5 trades for context
     except Exception as e:
         print(f"  [Main] History load warning: {e}")
 
     # -- Step 7: Execution pipeline (Trader -> Risk Mgr -> Portfolio Mgr) -----
     print(f"  [Main] Running execution pipeline...")
     try:
-        debate_transcript = debate_result.get("transcript", [])
-        decision = await run_execution_pipeline(pair, analysis, debate_transcript, history, llm)
+        decision = await run_execution_pipeline(pair, analysis, debate_result, history, llm)
         print(f"    Action:     {decision.get('action', 'N/A')}")
         print(f"    Confidence: {decision.get('confidence', 'N/A')}%")
-        print(f"    Reasoning:  {str(decision.get('reasoning', 'N/A'))[:80]}")
+        print(f"    Size:       {decision.get('position_size', 'N/A')} lots")
+        print(f"    Reasoning:  {str(decision.get('reasoning', 'N/A'))[:60]}")
     except Exception as e:
         print(f"  [Main] Execution pipeline error: {e}")
-        decision = {"action": "HOLD", "confidence": 0, "reasoning": str(e)}
+        decision = {"action": "HOLD", "confidence": 0, "position_size": 0, "reasoning": str(e)}
 
     # -- Step 8: Place order if BUY or SELL -----------------------------------
     action = decision.get("action", "HOLD").upper()
@@ -140,12 +142,13 @@ async def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
             print(f"  [Main] Position opened since check -- skipping order")
         else:
             print(f"  [Main] Placing {action} order for {pair}...")
+            size = decision.get("position_size", DEFAULT_LOT_SIZE)
             sl = decision.get("sl", 0)
             tp = decision.get("tp", 0)
             order_result = executor.place_order(
                 pair=pair,
                 action=action,
-                size=DEFAULT_LOT_SIZE,
+                size=size,
                 sl=sl,
                 tp=tp,
             )
@@ -172,7 +175,7 @@ async def analyze_pair(pair, rounds, llm, fetcher, executor, telegram, memory):
 
     # -- Step 10: Save to memory -----------------------------------------------
     try:
-        memory.save(pair, decision)
+        memory.save_decision(pair, decision, analysis, debate_result.get("transcript", []))
     except Exception as e:
         print(f"  [Main] Memory save error: {e}")
 
@@ -242,7 +245,8 @@ async def main():
         else:
             action = result.get("action", "N/A")
             conf   = result.get("confidence", 0)
-            print(f"  {pair}: {action} ({conf}% confidence)")
+            size   = result.get("position_size", 0)
+            print(f"  {pair}: {action} ({conf}% confidence) | Size: {size} lots")
 
     print("")
     print(f"  Run complete: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
